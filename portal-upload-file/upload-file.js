@@ -1,11 +1,28 @@
 let position = 0;
 
 async function generateHashFile(file) {
-  const arrayBuffer = await file.arrayBuffer();
-  const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-  return hashHex;
+  const chunkSize = (1024 * 1024) * 100; // 100MB
+  const chunkCount = Math.ceil(file.size / chunkSize);
+  const md = forge.md.sha256.create();
+
+  for (let i = 0; i < chunkCount; i++) {
+    const chunkStart = i * chunkSize;
+    const chunkEnd = Math.min(file.size, (i + 1) * chunkSize);
+    const fileSlice = file.slice(chunkStart, chunkEnd);
+    const arrayBuffer = await fileSlice.arrayBuffer();
+    const chunkBytes = new Uint8Array(arrayBuffer);
+
+    const binaryChunks = [];
+    const binaryChunkSize = 1024 * 10; // 10KB
+    for (let i = 0; i < chunkBytes.length; i += binaryChunkSize) {
+      binaryChunks.push(String.fromCharCode.apply(null, chunkBytes.subarray(i, i + binaryChunkSize)));
+    }
+
+    const binaryString = binaryChunks.join('');
+    md.update(binaryString);
+  }
+
+  return md.digest().toHex();
 }
 
 async function uploadFileByChunks(file, chunkSize, callback) {

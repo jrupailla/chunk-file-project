@@ -8,10 +8,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.io.File;
-import java.io.IOException;
-import java.io.OutputStream;
-import java.io.UncheckedIOException;
+import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -74,14 +71,15 @@ public class FileServiceImplement implements FileService {
         Path path = Paths.get(fileDto.getUploadDir() + "/" + fileDto.getFile().getOriginalFilename());
         String hashFile = this.generateHashFile(path);
 
+        logger.info("Client file hash: {}", fileDto.getHash());
+        logger.info("Server file hash: {}", hashFile);
+
         if (!hashFile.equals(fileDto.getHash())) {
             logger.error("File hash does not match: {}", fileDto.getFile().getOriginalFilename());
             throw new CustomException("FILE_CORRUPTED", "File is corrupted, please upload again.");
         }
 
         logger.info("File hash matches: {}", fileDto.getFile().getOriginalFilename());
-        logger.info("Client file hash: {}", fileDto.getHash());
-        logger.info("Server file hash: {}", hashFile);
     }
 
     private void createDirectory(String pathDir) throws IOException {
@@ -94,14 +92,23 @@ public class FileServiceImplement implements FileService {
     private String generateHashFile(Path filePath) {
         try {
             MessageDigest sha256Digest = MessageDigest.getInstance("SHA-256");
-            byte[] fileBytes = Files.readAllBytes(filePath);
-            byte[] hashBytes = sha256Digest.digest(fileBytes);
+            InputStream inputStream = new FileInputStream(filePath.toFile());
+
+            byte[] dataBytes = new byte[1024];
+            int bytesRead;
+
+            while ((bytesRead = inputStream.read(dataBytes)) != -1) {
+                sha256Digest.update(dataBytes, 0, bytesRead);
+            }
+
+            byte[] hashBytes = sha256Digest.digest();
 
             StringBuilder hash = new StringBuilder();
             for (byte b : hashBytes) {
                 hash.append(String.format("%02x", b));
             }
 
+            inputStream.close();
             return hash.toString();
         } catch (Exception e) {
             throw new CustomException("FILE_HASH", "Could not generate hash file", e);
